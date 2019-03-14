@@ -714,6 +714,14 @@ func statefulSetForVault(v *vaultv1alpha1.Vault) (*appsv1.StatefulSet, error) {
 									Name:  "VAULT_LOCAL_CONFIG",
 									Value: configJSON,
 								},
+								{
+									Name: "POD_IP",
+									Value: &v1.EnvVarSource{
+										FieldRef: &v1.ObjectFieldSelector{
+											FieldPath: "status.podIP",
+										},
+									},
+								},
 							}))),
 							SecurityContext: &corev1.SecurityContext{
 								Capabilities: &corev1.Capabilities{
