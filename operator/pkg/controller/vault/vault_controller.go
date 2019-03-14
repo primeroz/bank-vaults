@@ -717,8 +717,8 @@ func statefulSetForVault(v *vaultv1alpha1.Vault) (*appsv1.StatefulSet, error) {
 								},
 								{
 									Name: "POD_IP",
-									Value: &v1.EnvVarSource{
-										FieldRef: &v1.ObjectFieldSelector{
+									Value: &corev1.EnvVarSource{
+										FieldRef: &corev1.ObjectFieldSelector{
 											FieldPath: "status.podIP",
 										},
 									},
