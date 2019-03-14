@@ -144,8 +144,15 @@ func (r *ReconcileVault) Reconcile(request reconcile.Request) (reconcile.Result,
 			return reconcile.Result{}, err
 		}
 
-		err = r.client.Create(context.TODO(), etcdCluster)
-		if err != nil && apierrors.IsAlreadyExists(err) {
+		var previousEtcd etcdV1beta2.EtcdCluster
+
+		err = r.client.Get(context.TODO(), client.ObjectKey{Name: etcdCluster.Name, Namespace: etcdCluster.Namespace}, &previousEtcd)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				err = r.client.Create(context.TODO(), etcdCluster)
+			}
+		} else {
+			etcdCluster.ResourceVersion = previousEtcd.ResourceVersion
 			err = r.client.Update(context.TODO(), etcdCluster)
 		}
 		if err != nil {
@@ -260,6 +267,21 @@ func (r *ReconcileVault) Reconcile(request reconcile.Request) (reconcile.Result,
 	err = r.client.Create(context.TODO(), ser)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return reconcile.Result{}, fmt.Errorf("failed to create service: %v", err)
+	}
+
+	// Create the service if it doesn't exist
+	// NOTE: currently this is not used, but should be here once we implement support for Client Forwarding as well.
+	// Currently request forwarding works only.
+	services := perInstanceServicesForVault(v)
+	for _, ser := range services {
+		// Set Vault instance as the owner and controller
+		if err := controllerutil.SetControllerReference(v, ser, r.scheme); err != nil {
+			return reconcile.Result{}, err
+		}
+		err = r.client.Create(context.TODO(), ser)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			return reconcile.Result{}, fmt.Errorf("failed to create per instance service: %v", err)
+		}
 	}
 
 	// Create the configmap if it doesn't exist
@@ -429,6 +451,48 @@ func serviceForVault(v *vaultv1alpha1.Vault) *corev1.Service {
 		},
 	}
 	return service
+}
+
+func perInstanceServicesForVault(v *vaultv1alpha1.Vault) []*corev1.Service {
+	var services []*corev1.Service
+
+	for i := 0; i < int(v.Spec.Size); i++ {
+
+		podName := fmt.Sprintf("%s-%d", v.Name, i)
+
+		ls := labelsForVault(v.Name)
+		ls[appsv1.StatefulSetPodNameLabel] = podName
+
+		service := &corev1.Service{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Service",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName,
+				Namespace: v.Namespace,
+				Labels:    ls,
+			},
+			Spec: corev1.ServiceSpec{
+				Type:     serviceType(v),
+				Selector: ls,
+				Ports: []corev1.ServicePort{
+					{
+						Name: "api-port",
+						Port: 8200,
+					},
+					{
+						Name: "cluster-port",
+						Port: 8201,
+					},
+				},
+			},
+		}
+
+		services = append(services, service)
+	}
+
+	return services
 }
 
 func ingressForVault(v *vaultv1alpha1.Vault) *v1beta1.Ingress {
@@ -727,6 +791,10 @@ func statefulSetForVault(v *vaultv1alpha1.Vault) (*appsv1.StatefulSet, error) {
 									Name:  "VAULT_CLUSTER_ADDR",
 									Value: "https://$(POD_IP):8201",
 								},
+								{
+									Name:  "VAULT_LOG_LEVEL",
+									Value: "trace",
+								},
 							}))),
 							SecurityContext: &corev1.SecurityContext{
 								Capabilities: &corev1.Capabilities{
@@ -762,7 +830,7 @@ func statefulSetForVault(v *vaultv1alpha1.Vault) (*appsv1.StatefulSet, error) {
 							Image:           v.Spec.GetBankVaultsImage(),
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Name:            "bank-vaults",
-							Command:         withSupportUpgradeParams(v, []string{"bank-vaults", "unseal", "--init"}),
+							Command:         []string{"bank-vaults", "unseal", "--init"},
 							Args:            v.Spec.UnsealConfig.ToArgs(v),
 							Env: withSecretEnv(v, withTLSEnv(v, true, withCredentialsEnv(v, []corev1.EnvVar{
 								{
@@ -1023,15 +1091,6 @@ func getNodeAffinity(v *vaultv1alpha1.Vault) *corev1.NodeAffinity {
 		return nil
 	}
 	return &v.Spec.NodeAffinity
-}
-
-func withSupportUpgradeParams(v *vaultv1alpha1.Vault, params []string) []string {
-	if v.Spec.SupportUpgrade == nil || *v.Spec.SupportUpgrade {
-		host := fmt.Sprintf("%s.%s", v.Name, v.Namespace)
-		address := fmt.Sprintf("https://%s:8200", host)
-		params = append(params, []string{"--step-down-active", "--active-node-address", address}...)
-	}
-	return params
 }
 
 func getVaultURIScheme(v *vaultv1alpha1.Vault) corev1.URIScheme {
