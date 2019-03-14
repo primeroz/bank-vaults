@@ -411,6 +411,7 @@ func serviceForVault(v *vaultv1alpha1.Vault) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      v.Name,
 			Namespace: v.Namespace,
+			Labels:    ls,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     serviceType(v),
@@ -745,7 +746,7 @@ func statefulSetForVault(v *vaultv1alpha1.Vault) (*appsv1.StatefulSet, error) {
 									HTTPGet: &corev1.HTTPGetAction{
 										Scheme: getVaultURIScheme(v),
 										Port:   intstr.FromString("api-port"),
-										Path:   "/v1/sys/health",
+										Path:   "/v1/sys/health?standbyok&perfstandbyok",
 									}},
 								PeriodSeconds:    5,
 								FailureThreshold: 2,
@@ -1140,7 +1141,7 @@ func getVaultResource(v *vaultv1alpha1.Vault) *corev1.ResourceRequirements {
 
 	return &corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("500m"),
+			corev1.ResourceCPU:    resource.MustParse("250m"),
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
 		},
 		Limits: corev1.ResourceList{
