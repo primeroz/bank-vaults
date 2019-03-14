@@ -723,6 +723,10 @@ func statefulSetForVault(v *vaultv1alpha1.Vault) (*appsv1.StatefulSet, error) {
 										},
 									},
 								},
+								{
+									Name:  "VAULT_CLUSTER_ADDR",
+									Value: "https://$(POD_IP):8201",
+								},
 							}))),
 							SecurityContext: &corev1.SecurityContext{
 								Capabilities: &corev1.Capabilities{
