@@ -133,6 +133,15 @@ var configureCmd = &cobra.Command{
 	},
 }
 
+func stringInSlice(match string, list []string) bool {
+    for _, item := range list {
+        if item == match {
+            return true
+        }
+    }
+    return false
+}
+
 func watchConfigurations(vaultConfigFiles []string, configurations chan *viper.Viper) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -145,26 +154,25 @@ func watchConfigurations(vaultConfigFiles []string, configurations chan *viper.V
 		configFile := filepath.Clean(vaultConfigFile)
 		configDir, _ := filepath.Split(configFile)
 
-		done := make(chan bool)
-		go func() {
-			for {
-				select {
-				case event := <-watcher.Events:
-					// we only care about the config file or the ConfigMap directory (if in Kubernetes)
-					if filepath.Clean(event.Name) == configFile || filepath.Base(event.Name) == "..data" {
-						if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
-							configurations <- parseConfiguration(configFile)
-						}
-					}
-				case err := <-watcher.Errors:
-					logrus.Error(err)
-				}
-			}
-		}()
-
+    logrus.Infof("ADDING WATCHER: %s", configDir)
 		watcher.Add(configDir)
-		<-done
 	}
+
+  eventstream := watcher.Events
+	done := make(chan bool)
+	go func() {
+		for event := range eventstream {
+        logrus.Infof("EventName: %s", event.Name)
+				// we only care about the config file or the ConfigMap directory (if in Kubernetes)
+				if stringInSlice(filepath.Clean(event.Name), vaultConfigFiles) || filepath.Base(event.Name) == "..data" {
+					if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
+						configurations <- parseConfiguration(filepath.Clean(event.Name))
+					}
+				}
+		}
+	 <-done
+	}()
+
 }
 
 func parseConfiguration(vaultConfigFile string) *viper.Viper {
