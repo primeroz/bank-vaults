@@ -82,7 +82,8 @@ var configureCmd = &cobra.Command{
 
 		configurations := make(chan *viper.Viper, len(vaultConfigFiles))
 
-		for _, vaultConfigFile := range vaultConfigFiles {
+		for i, vaultConfigFile := range vaultConfigFiles {
+		  vaultConfigFiles[i] = filepath.Clean(vaultConfigFile)
 			configurations <- parseConfiguration(vaultConfigFile)
 		}
 
@@ -151,10 +152,10 @@ func watchConfigurations(vaultConfigFiles []string, configurations chan *viper.V
 
 	for _, vaultConfigFile := range vaultConfigFiles {
 		// we have to watch the entire directory to pick up renames/atomic saves in a cross-platform way
-		configFile := filepath.Clean(vaultConfigFile)
+		configFile := vaultConfigFile
 		configDir, _ := filepath.Split(configFile)
 
-    logrus.Infof("ADDING WATCHER: %s", configDir)
+    logrus.Infof("Watching Directory for changes: %s", configDir)
 		watcher.Add(configDir)
 	}
 
@@ -162,7 +163,7 @@ func watchConfigurations(vaultConfigFiles []string, configurations chan *viper.V
 	done := make(chan bool)
 	go func() {
 		for event := range eventstream {
-        logrus.Infof("EventName: %s", event.Name)
+        logrus.Infof("EventName: %s, EventOp: %s", event.Name, event.Op)
 				// we only care about the config file or the ConfigMap directory (if in Kubernetes)
 				if stringInSlice(filepath.Clean(event.Name), vaultConfigFiles) || filepath.Base(event.Name) == "..data" {
 					if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
@@ -170,8 +171,8 @@ func watchConfigurations(vaultConfigFiles []string, configurations chan *viper.V
 					}
 				}
 		}
-	 <-done
 	}()
+	<-done
 
 }
 
