@@ -107,6 +107,7 @@ type VaultSpec struct {
 	FluentDEnabled             bool                  `json:"fluentdEnabled"`
 	FluentDImage               string                `json:"fluentdImage"`
 	FluentDConfig              string                `json:"fluentdConfig"`
+	WatchExternalSecrets       []string              `json:"watchExternalSecrets,omitempty"`
 	Annotations                map[string]string     `json:"annotations"`
 	VaultAnnotations           map[string]string     `json:"vaultAnnotations"`
 	VaultConfigurerAnnotations map[string]string     `json:"vaultConfigurerAnnotations"`
@@ -263,6 +264,15 @@ func (spec *VaultSpec) GetStatsDImage() string {
 		return "prom/statsd-exporter:latest"
 	}
 	return spec.StatsDImage
+}
+
+// GetWatchedExternalSecrets returns the list of names of external secrets to watch in the namespace
+func (spec *VaultSpec) GetWatchedExternalSecrets() []string {
+	if spec.WatchExternalSecrets == nil {
+		spec.WatchExternalSecrets = []string{}
+	}
+
+	return spec.WatchExternalSecrets
 }
 
 // GetAnnotations returns the Common Annotations
