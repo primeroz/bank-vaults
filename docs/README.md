@@ -11,3 +11,7 @@
 - [Monitoring](monitoring/README.md)
 - [Annotations and Labels](annotations-and-labels/README.md)
 - [Contributing](contributing/README.md)
+- Guides
+  - [Public Vault with Cert-manager and let's encrypt](guides/public-vault-with-cert-manager/README.md)
+
+
